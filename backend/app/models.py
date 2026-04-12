@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from sqlalchemy import String, DateTime, Text, ForeignKey
+from sqlalchemy import String, DateTime, Text, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -18,6 +18,9 @@ class Project(Base):
 
     events: Mapped[list["Event"]] = relationship(
         "Event", back_populates="project", cascade="all, delete-orphan"
+    )
+    insights: Mapped[list["ProjectInsight"]] = relationship(
+        "ProjectInsight", back_populates="project", cascade="all, delete-orphan"
     )
 
 
@@ -46,3 +49,19 @@ class Event(Base):
         if self.numeric_fields:
             return json.loads(self.numeric_fields)
         return {}
+
+
+class ProjectInsight(Base):
+    __tablename__ = "project_insights"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    project: Mapped["Project"] = relationship("Project", back_populates="insights")

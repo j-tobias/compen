@@ -26,6 +26,13 @@ export interface FieldStat {
   count: number;
 }
 
+export interface Insight {
+  id: string;
+  content: string;
+  event_count: number;
+  generated_at: string;
+}
+
 export interface ProjectStats {
   total_events: number;
   sources: string[];
@@ -55,6 +62,7 @@ export const api = {
     delete: (slug: string) =>
       fetch(`${BASE}/api/projects/${slug}`, { method: "DELETE" }),
     stats: (slug: string) => request<ProjectStats>(`/api/projects/${slug}/stats`),
+    latestInsight: (slug: string) => request<Insight | null>(`/api/projects/${slug}/insights/latest`),
   },
   events: {
     list: (slug: string, limit = 100, offset = 0) =>

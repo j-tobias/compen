@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { ArrowLeft, Activity, RefreshCw, Copy, Check } from "lucide-react";
 import { api, Event, ProjectStats, Project } from "@/lib/api";
+import InsightsPanel from "./InsightsPanel";
 
 const COLORS = [
   "#60a5fa", "#34d399", "#f472b6", "#fb923c",
@@ -221,6 +222,7 @@ export default function Dashboard({ slug }: Props) {
 
         {stats && <StatsBar stats={stats} />}
         <NumericChart events={events} fields={numericFields} />
+        <InsightsPanel slug={slug} eventCount={stats?.total_events ?? 0} />
         <EventFeed events={events} />
       </main>
     </div>
