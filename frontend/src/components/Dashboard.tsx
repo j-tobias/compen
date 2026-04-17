@@ -27,7 +27,7 @@ function formatDate(iso: string) {
 
 function IngestUrl({ slug }: { slug: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `http://localhost:8000/${slug}/ingest`;
+  const url = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/${slug}/ingest`;
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); }}

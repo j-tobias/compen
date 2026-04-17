@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - db_data:/data
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////data/compen.db
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://malve:3001}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://malve:4100/v1}
+      LLM_MODEL: ${LLM_MODEL:-Gemma4-26B}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://malve:8000}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  db_data:
