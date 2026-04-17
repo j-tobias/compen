@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Activity, ChevronRight, Inbox, LogOut, Globe, Lock } from "lucide-react";
+import { Plus, Activity, ChevronRight, Inbox, LogOut, Globe, Lock, Trash2, X } from "lucide-react";
 import { api, Project } from "@/lib/api";
 import { isAuthenticated, clearToken } from "@/lib/auth";
 import CreateProjectDialog from "./CreateProjectDialog";
@@ -13,6 +13,8 @@ export default function ProjectList() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated()) router.replace("/login");
@@ -32,6 +34,17 @@ export default function ProjectList() {
   function handleLogout() {
     clearToken();
     router.replace("/login");
+  }
+
+  async function handleDelete(slug: string) {
+    setDeleting(slug);
+    try {
+      await api.projects.delete(slug);
+      setProjects((prev) => prev.filter((p) => p.slug !== slug));
+    } finally {
+      setDeleting(null);
+      setConfirmDelete(null);
+    }
   }
 
   return (
@@ -88,10 +101,10 @@ export default function ProjectList() {
         ) : (
           <ul className="space-y-3">
             {projects.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="flex items-stretch gap-2">
                 <Link
                   href={`/${p.slug}`}
-                  className="flex items-center justify-between p-5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-xl transition-all group"
+                  className="flex flex-1 items-center justify-between p-5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-xl transition-all group"
                 >
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
@@ -119,6 +132,32 @@ export default function ProjectList() {
                     <ChevronRight size={16} className="text-zinc-600 group-hover:text-zinc-400 transition-colors" />
                   </div>
                 </Link>
+
+                {/* Delete control */}
+                {confirmDelete === p.slug ? (
+                  <div className="flex items-center gap-1 px-3 bg-zinc-900 border border-red-900 rounded-xl">
+                    <button
+                      onClick={() => handleDelete(p.slug)}
+                      disabled={deleting === p.slug}
+                      className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors"
+                    >
+                      {deleting === p.slug ? "…" : "Delete"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDelete(p.slug)}
+                    className="px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-red-900 text-zinc-600 hover:text-red-400 rounded-xl transition-all"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
