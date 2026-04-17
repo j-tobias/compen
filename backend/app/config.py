@@ -9,3 +9,7 @@ LLM_API_KEY: str = os.environ.get("LLM_API_KEY", "")
 
 DATABASE_URL: str = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./compen.db")
 CORS_ORIGINS: list[str] = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+
+SECRET_KEY: str = os.environ.get("SECRET_KEY", "change-me-in-production")
+ADMIN_USERNAME: str = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD: str = os.environ.get("ADMIN_PASSWORD", "changeme")

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from ulid import ULID
 
+from ..auth import optional_auth
 from ..database import get_db
 from ..models import Project, Event, ProjectInsight
 from ..llm import stream_analysis
@@ -24,11 +25,16 @@ class InsightOut(BaseModel):
 
 
 @router.get("/{slug}/insights/latest", response_model=InsightOut | None)
-async def get_latest_insight(slug: str, db: AsyncSession = Depends(get_db)):
-    """Return the most recently generated insight for a project, or null."""
+async def get_latest_insight(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: str | None = Depends(optional_auth),
+):
     project = await db.scalar(select(Project).where(Project.slug == slug))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not project.is_public and user is None:
+        raise HTTPException(status_code=403, detail="Project is private")
 
     insight = await db.scalar(
         select(ProjectInsight)
@@ -39,14 +45,16 @@ async def get_latest_insight(slug: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{slug}/insights/stream")
-async def stream_insight(slug: str, db: AsyncSession = Depends(get_db)):
-    """
-    Stream a fresh LLM analysis as Server-Sent Events.
-    The final SSE event saves the full analysis to the DB.
-    """
+async def stream_insight(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: str | None = Depends(optional_auth),
+):
     project = await db.scalar(select(Project).where(Project.slug == slug))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not project.is_public and user is None:
+        raise HTTPException(status_code=403, detail="Project is private")
 
     events_result = await db.execute(
         select(Event)
@@ -79,10 +87,8 @@ async def stream_insight(slug: str, db: AsyncSession = Depends(get_db)):
         try:
             async for token in stream_analysis(project_name, project_desc, event_dicts):
                 full_text.append(token)
-                # SSE format: "data: <payload>\n\n"
                 yield f"data: {json.dumps({'token': token})}\n\n"
 
-            # Persist the completed analysis
             async with db.begin_nested():
                 insight = ProjectInsight(
                     id=str(ULID()),

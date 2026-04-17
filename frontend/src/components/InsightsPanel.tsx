@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Sparkles, RefreshCw, AlertCircle, Clock } from "lucide-react";
 import { api } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -97,8 +98,10 @@ export default function InsightsPanel({ slug, eventCount }: Props) {
     abortRef.current = controller;
 
     try {
+      const token = getToken();
       const res = await fetch(`${BASE}/api/projects/${slug}/insights/stream`, {
         signal: controller.signal,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
       if (!res.ok) {

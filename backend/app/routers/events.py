@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import optional_auth
 from ..database import get_db
 from ..models import Project, Event
 from ..schemas import EventOut
@@ -15,10 +16,13 @@ async def list_events(
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
+    user: str | None = Depends(optional_auth),
 ):
     project = await db.scalar(select(Project).where(Project.slug == slug))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not project.is_public and user is None:
+        raise HTTPException(status_code=403, detail="Project is private")
 
     result = await db.execute(
         select(Event)
