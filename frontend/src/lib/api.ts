@@ -92,7 +92,10 @@ export const api = {
         if (typeof window !== "undefined") window.location.href = "/login";
         throw new Error("Session expired");
       }
-      return res;
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`${res.status} ${res.statusText}: ${text}`);
+      }
     },
     stats: (slug: string) => request<ProjectStats>(`/api/projects/${slug}/stats`),
     latestInsight: (slug: string) =>

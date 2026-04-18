@@ -35,7 +35,11 @@ async def optional_auth(
         return None
     payload = _decode(credentials.credentials)
     if payload is None:
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return payload.get("sub")
 
 
