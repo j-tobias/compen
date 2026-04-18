@@ -25,8 +25,13 @@ class ProjectOut(BaseModel):
     description: str | None
     created_at: datetime
     event_count: int = 0
+    is_public: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class ProjectUpdate(BaseModel):
+    is_public: bool
 
 
 class EventOut(BaseModel):

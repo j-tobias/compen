@@ -5,8 +5,9 @@ import Link from "next/link";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { ArrowLeft, Activity, RefreshCw, Copy, Check } from "lucide-react";
+import { ArrowLeft, Activity, RefreshCw, Copy, Check, Globe, Lock } from "lucide-react";
 import { api, Event, ProjectStats, Project } from "@/lib/api";
+import { isAuthenticated } from "@/lib/auth";
 import InsightsPanel from "./InsightsPanel";
 
 const COLORS = [
@@ -27,7 +28,7 @@ function formatDate(iso: string) {
 
 function IngestUrl({ slug }: { slug: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `http://localhost:8000/${slug}/ingest`;
+  const url = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/${slug}/ingest`;
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
@@ -136,8 +137,10 @@ export default function Dashboard({ slug }: Props) {
   const [events, setEvents] = useState<Event[]>([]);
   const [stats, setStats] = useState<ProjectStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const authed = isAuthenticated();
 
   const load = useCallback(async () => {
     try {
@@ -149,6 +152,10 @@ export default function Dashboard({ slug }: Props) {
       setProject(proj);
       setEvents(evts);
       setStats(st);
+      setForbidden(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("403")) setForbidden(true);
     } finally {
       setLoading(false);
     }
@@ -165,12 +172,35 @@ export default function Dashboard({ slug }: Props) {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [autoRefresh, load]);
 
+  async function togglePublic() {
+    if (!project) return;
+    try {
+      const updated = await api.projects.update(slug, { is_public: !project.is_public });
+      setProject(updated);
+    } catch (err) {
+      console.error("Failed to update project visibility", err);
+    }
+  }
+
   const numericFields = stats?.numeric_field_stats.map((f) => f.field).slice(0, 8) ?? [];
 
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (forbidden) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-3 text-zinc-400">
+        <Lock size={32} className="text-zinc-600" />
+        <p className="font-medium text-white">This project is private</p>
+        <p className="text-sm text-zinc-500">Sign in to access it.</p>
+        <Link href="/login" className="mt-1 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+          Sign in →
+        </Link>
       </div>
     );
   }
@@ -198,6 +228,18 @@ export default function Dashboard({ slug }: Props) {
 
         <div className="flex items-center gap-3">
           <IngestUrl slug={slug} />
+          {authed && (
+            <button
+              onClick={togglePublic}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                project.is_public
+                  ? "bg-green-950/50 border-green-900 text-green-400 hover:bg-green-950"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white"
+              }`}
+            >
+              {project.is_public ? <><Globe size={12} /> Public</> : <><Lock size={12} /> Private</>}
+            </button>
+          )}
           <button
             onClick={() => setAutoRefresh((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${

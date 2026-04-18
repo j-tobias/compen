@@ -1,19 +1,29 @@
 import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
+from ..auth import require_auth, optional_auth
 from ..database import get_db
 from ..models import Project, Event
-from ..schemas import ProjectCreate, ProjectOut, ProjectStats, FieldStat
+from ..schemas import ProjectCreate, ProjectOut, ProjectStats, FieldStat, ProjectUpdate
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
+def _gate(project: Project, user: str | None):
+    if not project.is_public and user is None:
+        raise HTTPException(status_code=403, detail="Project is private")
+
+
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
-async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)):
+async def create_project(
+    body: ProjectCreate,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_auth),
+):
     existing = await db.scalar(select(Project).where(Project.slug == body.slug))
     if existing:
         raise HTTPException(status_code=409, detail=f"Project slug '{body.slug}' already exists")
@@ -35,7 +45,10 @@ async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)
 
 
 @router.get("", response_model=list[ProjectOut])
-async def list_projects(db: AsyncSession = Depends(get_db)):
+async def list_projects(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_auth),
+):
     result = await db.execute(
         select(Project, func.count(Event.id).label("event_count"))
         .outerjoin(Event, Event.project_id == Project.id)
@@ -52,10 +65,38 @@ async def list_projects(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{slug}", response_model=ProjectOut)
-async def get_project(slug: str, db: AsyncSession = Depends(get_db)):
+async def get_project(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: str | None = Depends(optional_auth),
+):
     project = await db.scalar(select(Project).where(Project.slug == slug))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _gate(project, user)
+
+    count = await db.scalar(
+        select(func.count(Event.id)).where(Event.project_id == project.id)
+    )
+    out = ProjectOut.model_validate(project)
+    out.event_count = count or 0
+    return out
+
+
+@router.patch("/{slug}", response_model=ProjectOut)
+async def update_project(
+    slug: str,
+    body: ProjectUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_auth),
+):
+    project = await db.scalar(select(Project).where(Project.slug == slug))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project.is_public = body.is_public
+    await db.commit()
+    await db.refresh(project)
 
     count = await db.scalar(
         select(func.count(Event.id)).where(Event.project_id == project.id)
@@ -66,7 +107,11 @@ async def get_project(slug: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(slug: str, db: AsyncSession = Depends(get_db)):
+async def delete_project(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_auth),
+):
     project = await db.scalar(select(Project).where(Project.slug == slug))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -75,10 +120,15 @@ async def delete_project(slug: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{slug}/stats", response_model=ProjectStats)
-async def project_stats(slug: str, db: AsyncSession = Depends(get_db)):
+async def project_stats(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: str | None = Depends(optional_auth),
+):
     project = await db.scalar(select(Project).where(Project.slug == slug))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _gate(project, user)
 
     total = await db.scalar(
         select(func.count(Event.id)).where(Event.project_id == project.id)
@@ -95,7 +145,6 @@ async def project_stats(slug: str, db: AsyncSession = Depends(get_db)):
     )
     first_at, last_at = timestamps.one()
 
-    # Aggregate numeric fields from stored numeric_fields JSON
     events_result = await db.execute(
         select(Event.numeric_fields).where(
             Event.project_id == project.id,
